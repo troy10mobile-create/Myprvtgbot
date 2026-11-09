@@ -1,7 +1,7 @@
 # Pixeldrain -> Telegram on Render
 
 This is a minimal environment migration of the supplied Google Colab batch script.
-The Pixeldrain list is processed once when the Render service starts. The HTTP
+All lists belonging to the authenticated Pixeldrain account are fetched from the Pixeldrain API and processed sequentially when the Render service starts. Each list keeps its own title-derived Telegram topic and existing per-file progress tracking. The HTTP
 server only provides `/` and `/health` so Render can see that the Web Service is
 alive; it does not change the Telegram/Pixeldrain workflow.
 
@@ -28,8 +28,7 @@ Set these environment variables in Render:
 | `TG_API_HASH` | Your Telegram API hash |
 | `TG_BOT_TOKEN` | A newly generated bot token |
 | `DESTINATION_CHAT_ID` | Destination supergroup/forum ID |
-| `PIXELDRAIN_LIST_URL` | Your Pixeldrain list URL |
-| `PIXELDRAIN_API_KEY` | Pixeldrain API key, if required |
+| `PIXELDRAIN_API_KEY` | Your Pixeldrain account API key (required to retrieve all lists belonging to your account) |
 
 Optional variables:
 
@@ -38,7 +37,7 @@ Optional variables:
 - `FILTER_SERVICE`
 - `DOWNLOAD_WORKERS` — default `2`
 - `SKIP_ALREADY_DONE_BY_THIS_TOOL` — default `true`
-- `SOURCE_DB_OR_JSON` — path to a DB/JSON file included in the repository/container
+- `SOURCE_DB_OR_JSON` — optional path to a DB/JSON file included in the repository/container; when set, it is used instead of fetching account lists
 
 Do not put secrets in `main.py`, README, or GitHub commits.
 
@@ -46,18 +45,25 @@ Do not put secrets in `main.py`, README, or GitHub commits.
 
 Render Free Web Services spin down after 15 minutes without inbound traffic.
 They have 750 free instance-hours per workspace per calendar month and an
-ephemeral filesystem. Local SQLite progress, topic cache, downloaded files,
-and the Telegram session file can disappear on restart, redeploy, or spin-down.
+ephemeral filesystem. Downloaded files and the Telegram session file can
+disappear on restart, redeploy, or spin-down. Upload progress and Telegram topic
+mappings are stored in Neon PostgreSQL instead of the local filesystem.
 
 If you want to reduce idle spin-down during a long batch, an external uptime
 checker can request `https://YOUR-SERVICE.onrender.com/health` every 10-14
 minutes. This does **not** guarantee uninterrupted execution: Render can still
 restart the service, and the workspace's monthly free-hour/bandwidth limits
-still apply. Do not rely on the local SQLite file as durable backup.
+still apply. The external uptime checker does not provide persistent storage;
+Neon is what preserves the upload tracking records.
 
 ## Batch behavior
 
 The batch begins automatically when the service process starts. After the batch
 finishes, the health server remains running. To run the batch again, manually
-restart/redeploy the service. A restart may lose its local progress database,
-so previously uploaded items may be processed again.
+restart/redeploy the service. The Neon progress records remain available after
+that restart, so successfully uploaded files can still be skipped.
+
+
+## Neon PostgreSQL progress tracking
+
+Add `DATABASE_URL_POOLED` to the Render environment using Neon's pooled connection string. You may also add `DATABASE_URL` as a direct-connection fallback. On startup, the app creates the `progress` and `topic_map` tables if they do not already exist. Existing SQLite progress files are not automatically imported; the Neon database starts with a clean tracking history. Downloaded media stays in `/tmp`, while upload statuses and Telegram topic IDs persist in Neon.
