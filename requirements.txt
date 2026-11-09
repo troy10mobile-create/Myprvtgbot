@@ -2,3 +2,6 @@ aiohttp
 aiofiles
 Telethon
 aiofasttelethonhelper
+psycopg2-binary
+requests
+bs4
