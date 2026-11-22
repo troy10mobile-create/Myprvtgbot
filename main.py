@@ -351,6 +351,7 @@ async def fetch_pixeldrain_account_lists():
     # Keep the API's order; each list is loaded and processed completely before
     # moving on to the next one.
     lists = [item for item in lists if item.get("id")]
+    lists.sort(key=lambda x: x.get("date_created") or "")
     print(f"Pixeldrain account lists found: {len(lists)}", flush=True)
     return lists
 
